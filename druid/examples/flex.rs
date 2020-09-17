@@ -271,11 +271,11 @@ fn build_widget(state: &Params) -> Box<dyn Widget<AppState>> {
     space_if_needed(&mut flex, state);
     flex.add_child(Switch::new().lens(DemoState::enabled));
     space_if_needed(&mut flex, state);
+    flex.add_child(RadioGroup::new(vec![("On", true), ("Off", false)]).lens(DemoState::enabled));
+    space_if_needed(&mut flex, state);
     flex.add_child(Slider::new().lens(DemoState::volume));
     space_if_needed(&mut flex, state);
     flex.add_child(ProgressBar::new().lens(DemoState::volume));
-    space_if_needed(&mut flex, state);
-    flex.add_child(RadioGroup::new(vec![("On", true), ("Off", false)]).lens(DemoState::enabled));
     space_if_needed(&mut flex, state);
     flex.add_child(
         Stepper::new()

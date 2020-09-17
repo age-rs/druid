@@ -712,6 +712,17 @@ impl<T: Data> Widget<T> for Flex<T> {
         ctx.set_paint_insets(insets);
         if use_baseline {
             ctx.set_baseline_position(max_below_baseline);
+        } else if matches!(self.direction, Axis::Vertical) {
+            let first_base = self
+                .children
+                .first()
+                .map(|child| {
+                    let offset =
+                        child.widget.layout_rect().max_y() - child.widget.baseline_offset();
+                    my_size.height - offset
+                })
+                .unwrap_or_default();
+            ctx.set_baseline_position(first_base);
         }
         my_size
     }
