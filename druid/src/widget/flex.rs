@@ -219,6 +219,8 @@ pub enum CrossAxisAlignment {
     /// In a vertical container, widgets are bottom aligned. In a horiziontal
     /// container, their trailing edges are aligned.
     End,
+    /// In a horizontal container, widgets are aligned along their first baseline.
+    FirstBaseline,
 }
 
 /// Arrangement of children on the main axis.
@@ -569,15 +571,21 @@ impl<T: Data> Widget<T> for Flex<T> {
         // we loosen our constraints when passing to children.
         let loosened_bc = bc.loosen();
 
+        // minor-axis values for all children
+        let mut minor = self.direction.minor(bc.min());
+        // these two are calculated but only used if we're baseline aligned
+        let mut max_above_baseline = 0f64;
+        let mut max_below_baseline = 0f64;
+
         // Measure non-flex children.
         let mut major_non_flex = 0.0;
-        let mut minor = self.direction.minor(bc.min());
         for child in &mut self.children {
             if child.params.flex == 0.0 {
                 let child_bc = self
                     .direction
                     .constraints(&loosened_bc, 0., std::f64::INFINITY);
                 let child_size = child.widget.layout(ctx, &child_bc, data, env);
+                let baseline_offset = child.widget.baseline_offset();
 
                 if child_size.width.is_infinite() {
                     log::warn!("A non-Flex child has an infinite width.");
@@ -589,6 +597,8 @@ impl<T: Data> Widget<T> for Flex<T> {
 
                 major_non_flex += self.direction.major(child_size).expand();
                 minor = minor.max(self.direction.minor(child_size).expand());
+                max_above_baseline = max_above_baseline.max(child_size.height - baseline_offset);
+                max_below_baseline = max_below_baseline.max(baseline_offset);
                 // Stash size.
                 let rect = Rect::from_origin_size(Point::ORIGIN, child_size);
                 child.widget.set_layout_rect(ctx, data, env, rect);
@@ -613,9 +623,12 @@ impl<T: Data> Widget<T> for Flex<T> {
                     .direction
                     .constraints(&loosened_bc, min_major, actual_major);
                 let child_size = child.widget.layout(ctx, &child_bc, data, env);
+                let baseline_offset = child.widget.baseline_offset();
 
                 major_flex += self.direction.major(child_size).expand();
                 minor = minor.max(self.direction.minor(child_size).expand());
+                max_above_baseline = max_above_baseline.max(child_size.height - baseline_offset);
+                max_below_baseline = max_below_baseline.max(baseline_offset);
                 // Stash size.
                 let rect = Rect::from_origin_size(Point::ORIGIN, child_size);
                 child.widget.set_layout_rect(ctx, data, env, rect);
@@ -623,7 +636,7 @@ impl<T: Data> Widget<T> for Flex<T> {
         }
 
         // figure out if we have extra space on major axis, and if so how to use it
-        let extra = if self.fill_major_axis {
+        let extra_major = if self.fill_major_axis {
             (remaining - major_flex).max(0.0)
         } else {
             // if we are *not* expected to fill our available space this usually
@@ -631,20 +644,44 @@ impl<T: Data> Widget<T> for Flex<T> {
             (self.direction.major(bc.min()) - (major_non_flex + major_flex)).max(0.0)
         };
 
-        let mut spacing = Spacing::new(self.main_alignment, extra, self.children.len());
+        let mut spacing = Spacing::new(self.main_alignment, extra_major, self.children.len());
+
         // Finalize layout, assigning positions to each child.
+        let use_baseline = matches!(self.direction, Axis::Horizontal)
+            && matches!(self.cross_alignment, CrossAxisAlignment::FirstBaseline);
+        // in the baseline case if the container is taller than the items we need
+        // to offset them additionally; in other cases Alignment::align uses all
+        // available space
+        let (minor, extra_minor) = if use_baseline {
+            let max_item_minor = max_below_baseline + max_above_baseline;
+            (max_item_minor, (minor - max_item_minor).max(0.0))
+        } else {
+            (minor, 0.0)
+        };
+
         let mut major = spacing.next().unwrap_or(0.);
         let mut child_paint_rect = Rect::ZERO;
         for child in &mut self.children {
             let rect = child.widget.layout_rect();
-            let extra_minor = minor - self.direction.minor(rect.size());
             let alignment = child.params.alignment.unwrap_or(self.cross_alignment);
-            let align_minor = alignment.align(extra_minor);
-            let pos: Point = self.direction.pack(major, align_minor).into();
+            let child_minor_offset = match alignment {
+                // This will ignore baseline alignment if it is overridden on children,
+                // but is not the default for the container. Is this okay?
+                CrossAxisAlignment::FirstBaseline if use_baseline => {
+                    let child_baseline = child.widget.baseline_offset();
+                    let child_above_baseline = rect.height() - child_baseline;
+                    extra_minor + max_above_baseline - child_above_baseline
+                }
+                _ => {
+                    let extra_minor = minor - self.direction.minor(rect.size());
+                    alignment.align(extra_minor)
+                }
+            };
 
+            let child_pos: Point = self.direction.pack(major, child_minor_offset).into();
             child
                 .widget
-                .set_layout_rect(ctx, data, env, rect.with_origin(pos));
+                .set_layout_rect(ctx, data, env, rect.with_origin(child_pos));
             child_paint_rect = child_paint_rect.union(child.widget.paint_rect());
             major += self.direction.major(rect.size()).expand();
             major += spacing.next().unwrap_or(0.);
@@ -673,6 +710,9 @@ impl<T: Data> Widget<T> for Flex<T> {
         let my_bounds = Rect::ZERO.with_size(my_size);
         let insets = child_paint_rect - my_bounds;
         ctx.set_paint_insets(insets);
+        if use_baseline {
+            ctx.set_baseline_position(max_below_baseline);
+        }
         my_size
     }
 
@@ -691,7 +731,8 @@ impl CrossAxisAlignment {
         match self {
             CrossAxisAlignment::Start => 0.0,
             CrossAxisAlignment::Center => (val / 2.0).round(),
-            CrossAxisAlignment::End => val,
+            // baseline defaults to end
+            CrossAxisAlignment::End | CrossAxisAlignment::FirstBaseline => val,
         }
     }
 }

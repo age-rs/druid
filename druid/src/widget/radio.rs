@@ -108,7 +108,11 @@ impl<T: Data + PartialEq> Widget<T> for Radio<T> {
             label_size.width + radio_diam + x_padding,
             radio_diam.max(label_size.height),
         );
-        bc.constrain(desired_size)
+        let actual_size = bc.constrain(desired_size);
+        let baseline = actual_size.height - self.child_label.layout_metrics().first_baseline;
+        ctx.set_baseline_position(baseline);
+
+        actual_size
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env) {

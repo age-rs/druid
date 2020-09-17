@@ -392,7 +392,7 @@ impl Widget<String> for TextBox {
         }
     }
 
-    fn update(&mut self, ctx: &mut UpdateCtx, old_data: &String, data: &String, env: &Env) {
+    fn update(&mut self, ctx: &mut UpdateCtx, old_data: &String, data: &String, _env: &Env) {
         let content = if data.is_empty() {
             &self.placeholder
         } else {
@@ -408,15 +408,13 @@ impl Widget<String> for TextBox {
             } else {
                 self.text.set_text_color(theme::LABEL_COLOR);
             }
+            ctx.request_layout();
         }
-
-        self.text.rebuild_if_needed(ctx.text(), env);
-        ctx.request_paint();
     }
 
     fn layout(
         &mut self,
-        _ctx: &mut LayoutCtx,
+        ctx: &mut LayoutCtx,
         bc: &BoxConstraints,
         _data: &String,
         env: &Env,
@@ -424,12 +422,18 @@ impl Widget<String> for TextBox {
         let width = env.get(theme::WIDE_WIDGET_WIDTH);
         let min_height = env.get(theme::BORDERED_WIDGET_HEIGHT);
 
-        let text_metrics = self.text.size();
-        let text_height = text_metrics.height + TEXT_INSETS.y_value();
+        self.text.rebuild_if_needed(ctx.text(), env);
+        let text_metrics = self.text.layout_metrics();
+        let text_height = text_metrics.size.height + TEXT_INSETS.y_value();
         let height = text_height.max(min_height);
 
         let size = bc.constrain((width, height));
+        let bottom_padding = (size.height - text_metrics.size.height) / 2.0;
+        let baseline_off =
+            bottom_padding + (text_metrics.size.height - text_metrics.first_baseline);
         self.width = size.width;
+        ctx.set_baseline_position(baseline_off);
+
         size
     }
 

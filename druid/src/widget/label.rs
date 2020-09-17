@@ -16,6 +16,7 @@
 
 use std::ops::{Deref, DerefMut};
 
+use crate::text::LayoutMetrics;
 use crate::widget::prelude::*;
 use crate::{
     ArcStr, BoxConstraints, Color, Data, FontDescriptor, KeyOrValue, LocalizedString, Point, Size,
@@ -268,6 +269,17 @@ impl RawLabel {
     pub fn draw_at(&self, ctx: &mut PaintCtx, origin: impl Into<Point>) {
         self.layout.draw(ctx, origin)
     }
+
+    /// Return the [`LayoutMetrics`] of the underlying [`TextLayout`] object.
+    ///
+    /// This is not meaningful until after [`layout`] has been called.
+    ///
+    /// [`LayoutMetrics`]: ../text/struct.LayoutMetrics.html
+    /// [`TextLayout`]: ../struct.TextLayout.html
+    /// [`layout`]: ../trait.Widget.html#tymethod.layout
+    pub fn layout_metrics(&self) -> LayoutMetrics {
+        self.layout.layout_metrics()
+    }
 }
 
 impl<T: Data> Label<T> {
@@ -328,6 +340,17 @@ impl<T: Data> Label<T> {
     pub fn dynamic(text: impl Fn(&T, &Env) -> String + 'static) -> Self {
         let text: LabelText<T> = text.into();
         Label::new(text)
+    }
+
+    /// Return the [`LayoutMetrics`] of the underlying [`TextLayout`] object.
+    ///
+    /// This is not meaningful until after [`layout`] has been called.
+    ///
+    /// [`LayoutMetrics`]: ../text/struct.LayoutMetrics.html
+    /// [`TextLayout`]: ../struct.TextLayout.html
+    /// [`layout`]: ../trait.Widget.html#tymethod.layout
+    pub fn layout_metrics(&self) -> LayoutMetrics {
+        self.label.layout.layout_metrics()
     }
 
     /// Return the current value of the label's text.
@@ -537,9 +560,13 @@ impl Widget<ArcStr> for RawLabel {
         self.layout.set_wrap_width(width);
         self.layout.rebuild_if_needed(ctx.text(), env);
 
-        let mut text_size = self.layout.size();
-        text_size.width += 2. * LABEL_X_PADDING;
-        bc.constrain(text_size)
+        let text_metrics = self.layout.layout_metrics();
+
+        ctx.set_baseline_position(text_metrics.size.height - text_metrics.first_baseline);
+        bc.constrain(Size::new(
+            text_metrics.size.width + 2. * LABEL_X_PADDING,
+            text_metrics.size.height,
+        ))
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, _data: &ArcStr, _env: &Env) {
