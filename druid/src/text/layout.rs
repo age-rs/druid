@@ -52,8 +52,23 @@ pub struct TextLayout {
     text_size_override: Option<KeyOrValue<f64>>,
     text_color: KeyOrValue<Color>,
     layout: Option<PietTextLayout>,
+    metrics: Option<LayoutMetrics>,
     wrap_width: f64,
     alignment: TextAlignment,
+}
+
+/// Metrics describing the layout text.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LayoutMetrics {
+    /// The nominal size of the layout.
+    pub size: Size,
+    /// The distance from the nominal top of the layout to the first baseline.
+    pub first_baseline: f64,
+
+    /// The distance from the nominal top of the layout to the last baseline.
+    //NOTE: this is not currently used in druid.
+    pub last_baseline: f64,
+    //TODO: add inking_rect
 }
 
 impl TextLayout {
@@ -70,6 +85,7 @@ impl TextLayout {
             text_color: crate::theme::LABEL_COLOR.into(),
             text_size_override: None,
             layout: None,
+            metrics: None,
             wrap_width: f64::INFINITY,
             alignment: Default::default(),
         }
@@ -90,7 +106,7 @@ impl TextLayout {
         let text = text.into();
         if text != self.text {
             self.text = text;
-            self.layout = None;
+            self.invalidate();
         }
     }
 
@@ -99,7 +115,7 @@ impl TextLayout {
         let color = color.into();
         if color != self.text_color {
             self.text_color = color;
-            self.layout = None;
+            self.invalidate();
         }
     }
 
@@ -115,8 +131,8 @@ impl TextLayout {
         let font = font.into();
         if font != self.font {
             self.font = font;
-            self.layout = None;
             self.text_size_override = None;
+            self.invalidate();
         }
     }
 
@@ -130,7 +146,7 @@ impl TextLayout {
         let size = size.into();
         if Some(&size) != self.text_size_override.as_ref() {
             self.text_size_override = Some(size);
-            self.layout = None;
+            self.invalidate();
         }
     }
 
@@ -142,7 +158,7 @@ impl TextLayout {
         // 1e-4 is an arbitrary small-enough value that we don't care to rewrap
         if (width - self.wrap_width).abs() > 1e-4 {
             self.wrap_width = width;
-            self.layout = None;
+            self.invalidate();
         }
     }
 
@@ -152,7 +168,7 @@ impl TextLayout {
     pub fn set_text_alignment(&mut self, alignment: TextAlignment) {
         if self.alignment != alignment {
             self.alignment = alignment;
-            self.layout = None;
+            self.invalidate();
         }
     }
 
@@ -166,6 +182,21 @@ impl TextLayout {
             .as_ref()
             .map(|layout| layout.size())
             .unwrap_or_default()
+    }
+
+    /// Return this object's [`LayoutMetrics`].
+    ///
+    /// This is not meaningful until [`rebuild_if_needed`] has been called.
+    ///
+    /// [`rebuild_if_needed`]: #method.rebuild_if_needed
+    /// [`LayoutMetrics`]: struct.LayoutMetrics.html
+    pub fn layout_metrics(&self) -> LayoutMetrics {
+        debug_assert!(
+            self.layout.is_some(),
+            "TextLayout::layout_metrics called without rebuilding layout object. Text was '{}'",
+            &self.text
+        );
+        self.metrics.clone().unwrap_or_default()
     }
 
     /// For a given `Point` (relative to this object's origin), returns index
@@ -235,7 +266,7 @@ impl TextLayout {
                     .unwrap_or(false);
 
             if rebuild {
-                self.layout = None;
+                self.invalidate();
             }
         }
         self.layout.is_none()
@@ -264,18 +295,28 @@ impl TextLayout {
                 font
             };
 
-            self.layout = Some(
-                factory
-                    .new_text_layout(self.text.clone())
-                    .max_width(self.wrap_width)
-                    .alignment(self.alignment)
-                    .font(descriptor.family.clone(), descriptor.size)
-                    .default_attribute(descriptor.weight)
-                    .default_attribute(descriptor.style)
-                    .default_attribute(TextAttribute::TextColor(color))
-                    .build()
-                    .unwrap(),
-            )
+            let layout = factory
+                .new_text_layout(self.text.clone())
+                .max_width(self.wrap_width)
+                .alignment(self.alignment)
+                .font(descriptor.family.clone(), descriptor.size)
+                .default_attribute(descriptor.weight)
+                .default_attribute(descriptor.style)
+                .default_attribute(TextAttribute::TextColor(color))
+                .build()
+                .unwrap();
+
+            // generate our LayoutMetrics
+            let first_baseline = layout.line_metric(0).unwrap().baseline;
+            let last_line = layout.line_count().saturating_sub(1);
+            let last_baseline = layout.line_metric(last_line).unwrap().baseline;
+            let size = layout.size();
+            self.metrics = Some(LayoutMetrics {
+                size,
+                first_baseline,
+                last_baseline,
+            });
+            self.layout = Some(layout);
         }
     }
 
@@ -296,6 +337,11 @@ impl TextLayout {
         if let Some(layout) = self.layout.as_ref() {
             ctx.draw_text(layout, point);
         }
+    }
+
+    fn invalidate(&mut self) {
+        self.layout = None;
+        self.metrics = None;
     }
 }
 

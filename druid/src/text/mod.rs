@@ -25,7 +25,7 @@ mod text_input;
 pub use self::backspace::offset_for_delete_backwards;
 pub use self::editable_text::{EditableText, EditableTextCursor, StringCursor};
 pub use self::font_descriptor::FontDescriptor;
-pub use self::layout::TextLayout;
+pub use self::layout::{LayoutMetrics, TextLayout};
 pub use self::movement::{movement, Movement};
 pub use self::selection::Selection;
 pub use self::text_input::{BasicTextInput, EditAction, MouseAction, TextInput};
