@@ -48,6 +48,7 @@ mod svg;
 mod switch;
 mod tabs;
 mod textbox;
+mod textbox2;
 mod view_switcher;
 #[allow(clippy::module_inception)]
 mod widget;
@@ -85,6 +86,7 @@ pub use svg::{Svg, SvgData};
 pub use switch::Switch;
 pub use tabs::{TabInfo, Tabs, TabsEdge, TabsPolicy, TabsState, TabsTransition};
 pub use textbox::TextBox;
+pub use textbox2::TextBox2;
 pub use view_switcher::ViewSwitcher;
 #[doc(hidden)]
 pub use widget::{Widget, WidgetId};

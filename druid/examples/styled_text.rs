@@ -15,7 +15,7 @@
 //! Example of dynamic text styling
 
 use druid::widget::{
-    Checkbox, Flex, Label, LensWrap, MainAxisAlignment, Painter, Parse, Stepper, TextBox,
+    Checkbox, Flex, Label, LensWrap, MainAxisAlignment, Painter, Parse, Stepper, TextBox, TextBox2,
 };
 use druid::{
     theme, AppLauncher, Color, Data, FontDescriptor, FontFamily, Key, Lens, LensExt,
@@ -119,9 +119,10 @@ fn ui_builder() -> impl Widget<AppData> {
 
     let mono_checkbox = Checkbox::new("Monospace").lens(AppData::mono);
 
-    let input = TextBox::new()
-        .with_placeholder("Your sample text here :)")
+    let input = TextBox2::new()
+        //.with_placeholder("Your sample text here :)")
         .fix_width(200.0)
+        .fix_height(120.0)
         .lens(AppData::text);
 
     Flex::column()
